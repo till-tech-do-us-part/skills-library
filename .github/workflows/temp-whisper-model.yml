@@ -1,0 +1,50 @@
+name: Temporary Whisper model retrieval
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  retrieve-models:
+    if: github.head_ref == 'temp-whisper-model-20260807'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download quantized English Whisper models
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p models
+          curl --fail --location --retry 5 --retry-all-errors \
+            'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin?download=true' \
+            --output models/ggml-tiny.en-q5_1.bin
+          curl --fail --location --retry 5 --retry-all-errors \
+            'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin?download=true' \
+            --output models/ggml-base.en-q5_1.bin
+          curl --fail --location --retry 5 --retry-all-errors \
+            'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin?download=true' \
+            --output models/ggml-small.en-q5_1.bin
+
+      - name: Verify model integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > checksums.txt <<'EOF'
+          c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b  models/ggml-tiny.en-q5_1.bin
+          4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f  models/ggml-base.en-q5_1.bin
+          bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30  models/ggml-small.en-q5_1.bin
+          EOF
+          sha256sum --check checksums.txt
+          du -h models/*
+
+      - name: Upload models for local transcription
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-english-q5-models
+          path: models/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
