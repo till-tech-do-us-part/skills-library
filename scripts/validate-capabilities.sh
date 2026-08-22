@@ -107,10 +107,10 @@ check_21st_auth() {
 
 check_refero_auth() {
   # OAuth state is client-managed. A registered/enabled MCP is not evidence of
-  # authentication; in particular Codex reports unauthenticated servers as
-  # "enabled  Not logged in". Only treat an explicit connected/authenticated
-  # client state as success.
-  local claude_status="" codex_status=""
+  # authentication; Codex explicitly reports unauthenticated OAuth servers as
+  # "enabled  Not logged in". Prefer Claude's explicit Connected state; for
+  # Codex, only pass if its refero row explicitly reports an authenticated state.
+  local claude_status="" codex_status="" codex_line=""
 
   if command -v claude >/dev/null 2>&1; then
     claude_status="$(timeout 30s claude mcp list 2>/dev/null || true)"
@@ -122,13 +122,9 @@ check_refero_auth() {
 
   if command -v codex >/dev/null 2>&1; then
     codex_status="$(timeout 30s codex mcp list 2>/dev/null || true)"
-    if printf '%s\n' "$codex_status" | awk '
-      $1 == "refero" {
-        if ($0 ~ /Not logged in/ || $0 ~ /Unsupported/) exit 1;
-        if ($0 ~ /Authenticated|Logged in|OAuth/) exit 0;
-      }
-      END { exit 1 }
-    '; then
+    codex_line="$(printf '%s\n' "$codex_status" | awk '$1 == "refero" { print; exit }')"
+    if [[ -n "$codex_line" && "$codex_line" != *"Not logged in"* && "$codex_line" != *"Unsupported"* ]] && \
+       [[ "$codex_line" =~ Authenticated|Logged[[:space:]]in|OAuth ]]; then
       pass "Refero authenticated in Codex"
       return
     fi
