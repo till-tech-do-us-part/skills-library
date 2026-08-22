@@ -10,6 +10,7 @@ STATE="$CAP_HOME/state"
 CLAUDE_SKILLS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
 CODEX_SKILLS="$HOME/.agents/skills"
 COLLECTUI_IMAGE="${COLLECTUI_MCP_IMAGE:-agent-capability/collectui-mcp:1.0.0}"
+COLLECTUI_AVAILABLE=0
 
 mkdir -p "$VENDOR" "$LOCAL_SKILLS" "$BIN" "$STATE" "$CLAUDE_SKILLS" "$CODEX_SKILLS"
 
@@ -76,11 +77,12 @@ build_collectui_sandbox() {
   log "building sandboxed CollectUI MCP"
   if command -v docker >/dev/null 2>&1; then
     docker build --pull -t "$COLLECTUI_IMAGE" "$ROOT/collectui"
+    COLLECTUI_AVAILABLE=1
   elif command -v podman >/dev/null 2>&1; then
     podman build --pull -t "$COLLECTUI_IMAGE" "$ROOT/collectui"
+    COLLECTUI_AVAILABLE=1
   else
     warn "Docker/Podman not present; CollectUI remains safely unavailable rather than running unsandboxed."
-    return 0
   fi
 }
 
@@ -117,11 +119,15 @@ configure_claude() {
   fi
   rm -f /tmp/claude-21st.$$
 
-  # Community CollectUI package is launched only through the no-mount sandbox wrapper.
-  if ! claude mcp get collectui >/tmp/claude-collectui.$$ 2>/dev/null || \
-     ! grep -Fq "collectui-mcp-sandbox" /tmp/claude-collectui.$$; then
+  # Community CollectUI package is exposed only when its container sandbox exists.
+  if (( COLLECTUI_AVAILABLE == 1 )); then
+    if ! claude mcp get collectui >/tmp/claude-collectui.$$ 2>/dev/null || \
+       ! grep -Fq "collectui-mcp-sandbox" /tmp/claude-collectui.$$; then
+      claude mcp remove collectui >/dev/null 2>&1 || true
+      claude mcp add --transport stdio --scope user collectui -- "$BIN/collectui-mcp-sandbox"
+    fi
+  else
     claude mcp remove collectui >/dev/null 2>&1 || true
-    claude mcp add --transport stdio --scope user collectui -- "$BIN/collectui-mcp-sandbox"
   fi
   rm -f /tmp/claude-collectui.$$
 }
@@ -187,10 +193,14 @@ configure_codex() {
   fi
   rm -f /tmp/codex-21st.$$
 
-  if ! codex mcp get collectui >/tmp/codex-collectui.$$ 2>/dev/null || \
-     ! grep -Fq "collectui-mcp-sandbox" /tmp/codex-collectui.$$; then
+  if (( COLLECTUI_AVAILABLE == 1 )); then
+    if ! codex mcp get collectui >/tmp/codex-collectui.$$ 2>/dev/null || \
+       ! grep -Fq "collectui-mcp-sandbox" /tmp/codex-collectui.$$; then
+      codex mcp remove collectui >/dev/null 2>&1 || true
+      codex mcp add collectui -- "$BIN/collectui-mcp-sandbox"
+    fi
+  else
     codex mcp remove collectui >/dev/null 2>&1 || true
-    codex mcp add collectui -- "$BIN/collectui-mcp-sandbox"
   fi
   rm -f /tmp/codex-collectui.$$
 }
@@ -208,12 +218,16 @@ installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 21st_skill_ref=a0059e9f3a8ed0310dee8e37bab9fb32ecbf1fa7
 refero_skill_ref=1d324d5be0492352e2c8702f70a4f9c386c2345f
 collectui_mcp=1.0.0
+collectui_available=$COLLECTUI_AVAILABLE
 scrolly_video_recommended=0.0.24
 EOF
 
   log "bootstrap complete; run: bash scripts/validate-capabilities.sh"
   if [[ -z "${API_KEY_21ST:-}" ]]; then
     warn "21st is configured but API_KEY_21ST is not present in this shell."
+  fi
+  if (( COLLECTUI_AVAILABLE == 0 )); then
+    warn "CollectUI is not registered because no approved container runtime is available."
   fi
   log "Refero OAuth may still require Claude /mcp authentication or: codex mcp login refero"
 }
