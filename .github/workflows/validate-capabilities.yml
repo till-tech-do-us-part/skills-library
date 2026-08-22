@@ -107,8 +107,8 @@ jobs:
         run: |
           rm -rf /tmp/capability-home
           mkdir -p /tmp/capability-home
-          HOME=/tmp/capability-home ./scripts/bootstrap-capabilities.sh
-          HOME=/tmp/capability-home ./scripts/validate-capabilities.sh
+          HOME=/tmp/capability-home bash scripts/bootstrap-capabilities.sh
+          HOME=/tmp/capability-home bash scripts/validate-capabilities.sh
           HOME=/tmp/capability-home claude mcp get refero
           HOME=/tmp/capability-home claude mcp get 21st
           HOME=/tmp/capability-home claude mcp get collectui
