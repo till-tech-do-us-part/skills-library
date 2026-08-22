@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -96,3 +96,22 @@ jobs:
           }
           probe https://api.refero.design/mcp
           probe https://21st.dev/api/mcp
+
+      - name: Install validated agent CLIs
+        run: |
+          npm install --global @anthropic-ai/claude-code@2.1.239 @openai/codex@0.149.0
+          claude --version
+          codex --version
+
+      - name: Clean-profile bootstrap against real Claude Code and Codex
+        run: |
+          rm -rf /tmp/capability-home
+          mkdir -p /tmp/capability-home
+          HOME=/tmp/capability-home ./scripts/bootstrap-capabilities.sh
+          HOME=/tmp/capability-home ./scripts/validate-capabilities.sh
+          HOME=/tmp/capability-home claude mcp get refero
+          HOME=/tmp/capability-home claude mcp get 21st
+          HOME=/tmp/capability-home claude mcp get collectui
+          HOME=/tmp/capability-home codex mcp get refero
+          HOME=/tmp/capability-home codex mcp get 21st
+          HOME=/tmp/capability-home codex mcp get collectui
