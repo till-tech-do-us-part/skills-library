@@ -1,0 +1,89 @@
+name: Validate capabilities
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Shell syntax
+        run: |
+          bash -n scripts/bootstrap-capabilities.sh
+          bash -n scripts/validate-capabilities.sh
+          bash -n scripts/21st-claude-headers.sh
+          bash -n scripts/run-collectui-mcp.sh
+
+      - name: Validate skill contracts
+        run: |
+          for skill in skills/*/SKILL.md; do
+            grep -q '^name:' "$skill"
+            grep -q '^description:' "$skill"
+          done
+
+      - name: Verify pinned vendor skill refs
+        run: |
+          test -n "$(git ls-remote https://github.com/21st-dev/skill.git a0059e9f3a8ed0310dee8e37bab9fb32ecbf1fa7)"
+          test -n "$(git ls-remote https://github.com/referodesign/refero_skill.git 1d324d5be0492352e2c8702f70a4f9c386c2345f)"
+
+      - name: Audit CollectUI package metadata before execution
+        run: |
+          mkdir -p /tmp/collectui-audit && cd /tmp/collectui-audit
+          npm view collectui-mcp@1.0.0 name version license author maintainers repository scripts dependencies dist.integrity dist.tarball --json | tee metadata.json
+          npm pack --ignore-scripts collectui-mcp@1.0.0 >/tmp/collectui-tarball.txt
+          tar -xzf "$(cat /tmp/collectui-tarball.txt)"
+          node <<'NODE'
+          const p = require('/tmp/collectui-audit/package/package.json');
+          if (p.name !== 'collectui-mcp' || p.version !== '1.0.0') throw new Error('unexpected package identity');
+          const dangerous = ['preinstall','install','postinstall','prepare'];
+          for (const s of dangerous) {
+            if (p.scripts && p.scripts[s]) throw new Error(`lifecycle script not allowed: ${s}=${p.scripts[s]}`);
+          }
+          if (!p.bin) throw new Error('package exposes no executable');
+          console.log(JSON.stringify({name:p.name, version:p.version, bin:p.bin, scripts:p.scripts||{}, dependencies:p.dependencies||{}}, null, 2));
+          NODE
+
+      - name: Build isolated CollectUI MCP
+        run: docker build -t agent-capability/collectui-mcp:1.0.0 collectui
+
+      - name: End-to-end CollectUI MCP tools/list
+        run: |
+          timeout 120s npx -y @modelcontextprotocol/inspector@2.3.0 --cli \
+            bash scripts/run-collectui-mcp.sh --method tools/list | tee /tmp/collectui-tools.json
+          grep -Eq 'tools|name' /tmp/collectui-tools.json
+
+      - name: Verify ScrollyVideo package can be installed project-locally
+        run: |
+          mkdir -p /tmp/scrolly-test && cd /tmp/scrolly-test
+          npm init -y >/dev/null
+          npm install --ignore-scripts --save-exact scrolly-video@0.0.24
+          test -f node_modules/scrolly-video/package.json
+          node -e "const p=require('./node_modules/scrolly-video/package.json'); if(p.version!=='0.0.24') process.exit(1); console.log(p.name,p.version)"
+
+      - name: Check remote MCP endpoints are reachable
+        run: |
+          probe() {
+            url="$1"
+            code="$(curl --retry 2 --connect-timeout 10 -sS -o /tmp/mcp-body -w '%{http_code}' \
+              -X POST "$url" \
+              -H 'content-type: application/json' \
+              -H 'accept: application/json, text/event-stream' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"capability-ci","version":"1"}}}')"
+            echo "$url -> HTTP $code"
+            test "$code" != "000"
+            case "$code" in 5*) echo "server returned 5xx"; exit 1;; esac
+          }
+          probe https://api.refero.design/mcp
+          probe https://21st.dev/api/mcp
