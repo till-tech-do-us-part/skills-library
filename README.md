@@ -18,18 +18,20 @@ The routing rules live in `skills/design-capability-router/SKILL.md`. ScrollyVid
 On each development host:
 
 ```bash
-./scripts/bootstrap-capabilities.sh
+bash scripts/bootstrap-capabilities.sh
 ```
 
-The bootstrap is idempotent. It installs or refreshes vendor-maintained skills, links this repository's portable skills into both agent skill directories, installs the pinned CollectUI MCP in an isolated user tool directory, and registers MCP servers with Claude Code and Codex without writing credentials to Git.
+The bootstrap is idempotent. It installs or refreshes vendor-maintained skills, links this repository's portable skills into both agent skill directories, installs the pinned CollectUI MCP in an isolated container image, and registers MCP servers with Claude Code and Codex without writing credentials to Git.
 
 Authentication-dependent capabilities remain disabled or unauthenticated until their owner credentials are available. Run:
 
 ```bash
-./scripts/validate-capabilities.sh
+bash scripts/validate-capabilities.sh
 ```
 
 for a deterministic health report.
+
+Invoking the scripts through `bash` is intentional: it keeps bootstrapping reliable even when a repository is created or updated through an API that does not preserve executable file modes.
 
 ## Security principles
 
