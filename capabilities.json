@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "capabilities": {
+    "refero": {
+      "mcp_url": "https://api.refero.design/mcp",
+      "skill_repo": "https://github.com/referodesign/refero_skill.git",
+      "skill_ref": "1d324d5be0492352e2c8702f70a4f9c386c2345f",
+      "skill_path": "skills/refero-design",
+      "auth": "oauth"
+    },
+    "21st": {
+      "mcp_url": "https://21st.dev/api/mcp",
+      "skill_repo": "https://github.com/21st-dev/skill.git",
+      "skill_ref": "a0059e9f3a8ed0310dee8e37bab9fb32ecbf1fa7",
+      "auth_env": "API_KEY_21ST"
+    },
+    "collectui": {
+      "package": "collectui-mcp",
+      "version": "1.0.0",
+      "publisher": "jsstechio",
+      "trust": "community-low-trust",
+      "execution": "container-sandbox-only"
+    },
+    "scrolly-video": {
+      "package": "scrolly-video",
+      "version": "0.0.24",
+      "install_scope": "project-on-demand",
+      "repository": "https://github.com/dkaoster/scrolly-video"
+    }
+  }
+}
