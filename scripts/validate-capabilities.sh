@@ -106,21 +106,34 @@ check_21st_auth() {
 }
 
 check_refero_auth() {
-  # OAuth state is client-managed. The authoritative operational check is the
-  # client MCP status; actual design search is performed in an authenticated
-  # agent session because tokens are intentionally not exported to this script.
+  # OAuth state is client-managed. A registered/enabled MCP is not evidence of
+  # authentication; in particular Codex reports unauthenticated servers as
+  # "enabled  Not logged in". Only treat an explicit connected/authenticated
+  # client state as success.
+  local claude_status="" codex_status=""
+
   if command -v claude >/dev/null 2>&1; then
-    if timeout 30s claude mcp list 2>/dev/null | grep -E 'refero.*Connected' >/dev/null; then
+    claude_status="$(timeout 30s claude mcp list 2>/dev/null || true)"
+    if printf '%s\n' "$claude_status" | grep -E 'refero:.*(✔|Connected)' >/dev/null; then
       pass "Refero connected in Claude Code"
       return
     fi
   fi
+
   if command -v codex >/dev/null 2>&1; then
-    if timeout 30s codex mcp list 2>/dev/null | grep -Ei 'refero.*(authenticated|enabled|connected)' >/dev/null; then
-      pass "Refero appears enabled/authenticated in Codex"
+    codex_status="$(timeout 30s codex mcp list 2>/dev/null || true)"
+    if printf '%s\n' "$codex_status" | awk '
+      $1 == "refero" {
+        if ($0 ~ /Not logged in/ || $0 ~ /Unsupported/) exit 1;
+        if ($0 ~ /Authenticated|Logged in|OAuth/) exit 0;
+      }
+      END { exit 1 }
+    '; then
+      pass "Refero authenticated in Codex"
       return
     fi
   fi
+
   warn "Refero MCP is registered but OAuth/live research still needs an authenticated client session"
 }
 
