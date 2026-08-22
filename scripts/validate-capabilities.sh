@@ -41,7 +41,7 @@ check_claude() {
     fi
     rm -f /tmp/validate-claude-$name.$$
   done
-  claude mcp list || warn "Claude MCP health list returned non-zero"
+  timeout 30s claude mcp list || warn "Claude MCP health list timed out or returned non-zero"
 }
 
 check_codex() {
@@ -57,7 +57,7 @@ check_codex() {
     fi
     rm -f /tmp/validate-codex-$name.$$
   done
-  codex mcp list || warn "Codex MCP health list returned non-zero"
+  timeout 30s codex mcp list || warn "Codex MCP health list timed out or returned non-zero"
 }
 
 check_collectui() {
@@ -110,13 +110,13 @@ check_refero_auth() {
   # client MCP status; actual design search is performed in an authenticated
   # agent session because tokens are intentionally not exported to this script.
   if command -v claude >/dev/null 2>&1; then
-    if claude mcp list 2>/dev/null | grep -E 'refero.*Connected' >/dev/null; then
+    if timeout 30s claude mcp list 2>/dev/null | grep -E 'refero.*Connected' >/dev/null; then
       pass "Refero connected in Claude Code"
       return
     fi
   fi
   if command -v codex >/dev/null 2>&1; then
-    if codex mcp list 2>/dev/null | grep -Ei 'refero.*(authenticated|enabled|connected)' >/dev/null; then
+    if timeout 30s codex mcp list 2>/dev/null | grep -Ei 'refero.*(authenticated|enabled|connected)' >/dev/null; then
       pass "Refero appears enabled/authenticated in Codex"
       return
     fi
