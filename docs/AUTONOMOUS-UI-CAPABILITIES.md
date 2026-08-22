@@ -19,7 +19,7 @@ Make Refero, 21st.dev, CollectUI, and ScrollyVideo available as condition-driven
 
 - Refero MCP and Refero's official `refero-design` skill.
 - 21st.dev MCP and official vendor skills.
-- CollectUI MCP wrapper, but only through an isolated container with no repository mount, no credentials, read-only filesystem, dropped Linux capabilities, and constrained resources.
+- CollectUI MCP wrapper, but only when an approved Docker/Podman sandbox is available; the MCP is not registered otherwise.
 - This repository's routing skills.
 
 ### Project-local/on-demand
@@ -42,6 +42,8 @@ Make Refero, 21st.dev, CollectUI, and ScrollyVideo available as condition-driven
 - Prefer OAuth so long-lived access tokens are not copied into config files.
 - Install the official `refero-design` skill from the vendor repository; do not fork its methodology into a competing local skill.
 - Live MCP research requires an account/plan with MCP access; the bundled craft guidance remains useful without live research.
+- Claude Code registration is non-interactive; OAuth is completed in the client when required.
+- Codex 0.149.0 was observed to begin Refero OAuth immediately during `codex mcp add`. Unattended bootstrap therefore writes only the `mcp_servers.refero` URL table to `~/.codex/config.toml`, preserving any other Codex configuration, and leaves owner authentication to `codex mcp login refero`. Bootstrap must never block waiting for OAuth.
 
 **Invocation rules**
 
@@ -69,8 +71,9 @@ Do not use for:
 **Validation**
 
 - Claude: `claude mcp list` / `/mcp` shows `refero` connected or requiring OAuth, then a style/screen search succeeds after authentication.
-- Codex: `codex mcp list` and `/mcp` show `refero`; run `codex mcp login refero` if required, then perform a search.
+- Codex: `codex mcp list` shows `refero`; run `codex mcp login refero` if it reports `Not logged in`, then perform a real search.
 - Skill discovery: `refero-design/SKILL.md` is reachable from both user skill directories.
+- Registration/enabled state is not treated as proof of authentication.
 
 ## Capability 2 — 21st.dev
 
@@ -87,7 +90,9 @@ Do not use for:
 - Remote MCP endpoint: `https://21st.dev/api/mcp`.
 - Credential source: `API_KEY_21ST` environment variable; never commit the key.
 - Install/sync the official `21st-dev/skill` skill repository. It provides `21st-cli-use`, `21st-ai`, `21st-registry`, and `21st-design-sync`.
-- The bootstrap registers the remote MCP directly rather than depending on an interactive plugin browser. The official vendor plugins remain the preferred manual alternative when operating interactively.
+- Claude Code uses a header helper so the `x-api-key` value is read from the environment at connection time rather than serialized into Git/config.
+- Codex stores only `bearer_token_env_var = "API_KEY_21ST"`; the secret value stays outside configuration.
+- The bootstrap registers the remote MCP directly rather than depending on an interactive plugin browser. The official vendor plugins remain a valid interactive alternative.
 
 **Invocation rules**
 
@@ -115,7 +120,7 @@ Do not use when:
 
 **Validation**
 
-- MCP lists tools such as search/get/generate after authentication.
+- MCP lists search/get/generate tools after authentication.
 - `21st` CLI can report auth/usage and perform a metadata search.
 - Official skills are discoverable in both agent skill directories.
 
@@ -128,18 +133,18 @@ Do not use when:
 
 **Risk classification**: LOW-TRUST / OPTIONAL / READ-ONLY.
 
-This package is deliberately not run directly in the host agent process. The wrapper launches it in Docker or Podman with:
+The package is deliberately not run directly in the host agent process. CI audits the exact npm package before execution, including identity, lifecycle scripts, executable metadata, and dependencies. The runtime wrapper launches it in Docker or Podman with:
 
 - no repository or home-directory mount;
 - read-only root filesystem;
 - temporary `/tmp` only;
 - all Linux capabilities dropped;
 - `no-new-privileges`;
-- memory/PID limits;
+- memory/PID/CPU limits;
 - no credentials passed through;
 - only outbound network access required for design lookup.
 
-If neither Docker nor Podman exists, the wrapper refuses to run instead of silently falling back to an unsandboxed process.
+If neither Docker nor Podman exists, bootstrap removes/skips the CollectUI MCP registration instead of leaving a broken tool visible or silently falling back to unsandboxed execution.
 
 **Invocation rules**
 
@@ -153,8 +158,9 @@ Do not use for architecture, security, framework decisions, product requirements
 
 **Validation**
 
-- CI builds the pinned sandbox image and runs MCP Inspector `tools/list` through the wrapper.
-- A host validation succeeds only if a container runtime exists and the MCP returns a non-empty tool list.
+- CI builds the sandbox image and runs MCP Inspector `tools/list` through the wrapper.
+- The validated package exposes `collectui_categories`, `collectui_browse`, and `collectui_search`.
+- A host validation succeeds only if a container runtime exists and the MCP returns a non-empty tool list; otherwise safe omission is the expected state.
 
 ## Capability 4 — ScrollyVideo.js
 
@@ -165,7 +171,7 @@ Do not use for architecture, security, framework decisions, product requirements
 
 **Implementation boundary**
 
-ScrollyVideo is a runtime library, not an MCP. It is never installed globally. The `scrollytelling-video` skill decides whether it is appropriate and, when required, installs it with the active repository's package manager.
+ScrollyVideo is a runtime library, not an MCP. It is never installed globally. The `scrollytelling-video` skill decides whether it is appropriate and, when required, installs it with the active repository's existing package manager and lockfile.
 
 Supported by the project: plain JS, React, Vue, Svelte, and Astro. The library exposes scroll tracking and manual progress control, including `setVideoPercentage` / `videoPercentage`.
 
@@ -197,13 +203,17 @@ Do not use for:
 - Claude Code: `~/.claude/skills/`
 - Codex: `~/.agents/skills/`
 
-Vendor skills are linked from their checked-out upstream repositories into the same directories. This preserves upstream maintainability while keeping local routing policy separate.
+Vendor skills are linked from pinned upstream checkouts into the same directories. This preserves upstream maintainability while keeping local routing policy separate.
+
+## Bootstrap and regression validation
+
+The capability package is validated in CI against a clean user profile rather than assuming pre-existing state. The current validation baseline installs and exercises Claude Code 2.1.239 and Codex CLI 0.149.0, verifies both clients can discover the intended skills/MCP registrations, smoke-tests CollectUI over MCP, installs `scrolly-video@0.0.24` in a clean temporary npm project, and confirms the official remote MCP endpoints are reachable. Authentication-dependent live calls remain separate owner/secret-bound checks.
 
 ## Failure and fallback
 
 - **Refero authentication/subscription unavailable** → continue with its local skill guidance; use CollectUI sandbox or ordinary web research only when design evidence remains necessary.
 - **21st authentication/credits unavailable** → use free metadata search if available; otherwise implement from the repository's existing component system. Never block a normal frontend task on 21st.
-- **CollectUI sandbox unavailable** → skip it. Do not run the community package unsandboxed merely to satisfy availability.
+- **CollectUI sandbox unavailable** → omit/skip it. Do not run the community package unsandboxed merely to satisfy availability.
 - **ScrollyVideo fails browser/performance validation** → fall back to native video with a simpler scroll controller, image-sequence/canvas only if justified, or a non-scrub motion treatment.
 
 ## Owner escalation boundary
@@ -213,6 +223,7 @@ Owner action is required only for:
 - obtaining/exporting `API_KEY_21ST` if not already available;
 - completing 21st account/API-key creation if no key exists;
 - completing Refero OAuth and/or enabling a paid plan that grants MCP access;
-- installing/authorizing Docker or Podman if the host has no approved container runtime and CollectUI is required.
+- installing/authorizing Docker or Podman if the target host has no approved container runtime and CollectUI is required;
+- granting an execution path to a persistent development host when the current agent session has no terminal/SSH/self-hosted-runner access.
 
 Everything else in this standard is agent-operable and should not be escalated.
