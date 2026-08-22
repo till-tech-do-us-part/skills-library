@@ -35,8 +35,17 @@ jobs:
 
       - name: Verify pinned vendor skill refs
         run: |
-          test -n "$(git ls-remote https://github.com/21st-dev/skill.git a0059e9f3a8ed0310dee8e37bab9fb32ecbf1fa7)"
-          test -n "$(git ls-remote https://github.com/referodesign/refero_skill.git 1d324d5be0492352e2c8702f70a4f9c386c2345f)"
+          verify_commit() {
+            repo="$1"
+            sha="$2"
+            tmp="$(mktemp -d)"
+            git -C "$tmp" init -q
+            git -C "$tmp" fetch -q --depth=1 "$repo" "$sha"
+            test "$(git -C "$tmp" rev-parse FETCH_HEAD)" = "$sha"
+            rm -rf "$tmp"
+          }
+          verify_commit https://github.com/21st-dev/skill.git a0059e9f3a8ed0310dee8e37bab9fb32ecbf1fa7
+          verify_commit https://github.com/referodesign/refero_skill.git 1d324d5be0492352e2c8702f70a4f9c386c2345f
 
       - name: Audit CollectUI package metadata before execution
         run: |
