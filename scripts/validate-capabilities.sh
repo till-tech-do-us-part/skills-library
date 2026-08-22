@@ -12,6 +12,10 @@ pass() { printf 'PASS  %s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*"; warnings=$((warnings+1)); }
 fail() { printf 'FAIL  %s\n' "$*"; failures=$((failures+1)); }
 
+has_container_runtime() {
+  command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1
+}
+
 check_skill() {
   local name="$1"
   [[ -f "$CLAUDE_SKILLS/$name/SKILL.md" ]] && pass "Claude skill: $name" || fail "Claude skill missing: $name"
@@ -33,7 +37,7 @@ check_claude() {
     warn "Claude Code CLI not present on this host"
     return
   fi
-  for name in refero 21st collectui; do
+  for name in refero 21st; do
     if claude mcp get "$name" >/tmp/validate-claude-$name.$$ 2>&1; then
       pass "Claude MCP registered: $name"
     else
@@ -41,6 +45,20 @@ check_claude() {
     fi
     rm -f /tmp/validate-claude-$name.$$
   done
+
+  if has_container_runtime; then
+    if claude mcp get collectui >/tmp/validate-claude-collectui.$$ 2>&1; then
+      pass "Claude MCP registered: collectui"
+    else
+      fail "Claude MCP missing: collectui"
+    fi
+  elif claude mcp get collectui >/tmp/validate-claude-collectui.$$ 2>&1; then
+    fail "Claude CollectUI MCP is registered without an approved container runtime"
+  else
+    pass "Claude CollectUI MCP omitted because no approved container runtime exists"
+  fi
+  rm -f /tmp/validate-claude-collectui.$$
+
   timeout 30s claude mcp list || warn "Claude MCP health list timed out or returned non-zero"
 }
 
@@ -49,7 +67,7 @@ check_codex() {
     warn "Codex CLI not present on this host"
     return
   fi
-  for name in refero 21st collectui; do
+  for name in refero 21st; do
     if codex mcp get "$name" >/tmp/validate-codex-$name.$$ 2>&1; then
       pass "Codex MCP registered: $name"
     else
@@ -57,6 +75,20 @@ check_codex() {
     fi
     rm -f /tmp/validate-codex-$name.$$
   done
+
+  if has_container_runtime; then
+    if codex mcp get collectui >/tmp/validate-codex-collectui.$$ 2>&1; then
+      pass "Codex MCP registered: collectui"
+    else
+      fail "Codex MCP missing: collectui"
+    fi
+  elif codex mcp get collectui >/tmp/validate-codex-collectui.$$ 2>&1; then
+    fail "Codex CollectUI MCP is registered without an approved container runtime"
+  else
+    pass "Codex CollectUI MCP omitted because no approved container runtime exists"
+  fi
+  rm -f /tmp/validate-codex-collectui.$$
+
   timeout 30s codex mcp list || warn "Codex MCP health list timed out or returned non-zero"
 }
 
@@ -65,7 +97,7 @@ check_collectui() {
     fail "CollectUI sandbox wrapper is not installed"
     return
   fi
-  if ! command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+  if ! has_container_runtime; then
     warn "No Docker/Podman; CollectUI intentionally unavailable"
     return
   fi
